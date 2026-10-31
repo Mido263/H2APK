@@ -1,7 +1,8 @@
 package main
 
 import (
-	"os"
+ "os"
+	"os/exec" 
 	"path/filepath"
 	"testing"
 	"time"
@@ -60,5 +61,14 @@ func TestEnvDefault(t *testing.T) {
 
 	if got != "default" {
 		t.Errorf("expected default, got %s", got)
+	}
+}
+func TestGoVet(t *testing.T) {
+	cmd := exec.Command("go", "vet", "./...")
+	cmd.Dir = filepath.Join("..", "..")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go vet failed: %s\n%s", err, output)
 	}
 }
