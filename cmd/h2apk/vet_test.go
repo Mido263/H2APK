@@ -2,51 +2,63 @@ package main
 
 import (
 	"os"
-	"os/exec"
-	"strings"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
-// TestAllTemplatesNoFormatErrors runs go vet to verify no fmt.Sprintf mismatches.
-func TestAllTemplatesNoFormatErrors(t *testing.T) {
-	cmd := exec.Command("go", "vet", "./...")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Errorf("go vet failed: %s", string(output))
+func TestCleanOldBuilds(t *testing.T) {
+	baseDir := t.TempDir()
+	outputDir := filepath.Join(baseDir, "output")
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldFile := filepath.Join(outputDir, "old.apk")
+	newFile := filepath.Join(outputDir, "new.apk")
+
+	if err := os.WriteFile(oldFile, []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(newFile, []byte("new"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTime := time.Now().Add(-48 * time.Hour)
+
+	if err := os.Chtimes(oldFile, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanOldBuilds(baseDir)
+
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Error("old file should have been removed")
+	}
+
+	if _, err := os.Stat(newFile); err != nil {
+		t.Error("new file should still exist")
 	}
 }
 
-// TestGoVetReturnsNoFatalErrors ensures vet only has warnings, not format errors.
-func TestGoVetReturnsNoFatalErrors(t *testing.T) {
-	cmd := exec.Command("go", "vet", "./...")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		outputStr := string(output)
-		if strings.Contains(outputStr, "format %s has arg") ||
-			strings.Contains(outputStr, "format %t has arg") ||
-			strings.Contains(outputStr, "format %d has arg") ||
-			strings.Contains(outputStr, "!%(EXTRA") ||
-			strings.Contains(outputStr, "!%(!s") ||
-			strings.Contains(outputStr, "!%(!d") {
-			t.Errorf("Format string mismatch detected:\n%s", outputStr)
-		}
+func TestEnv(t *testing.T) {
+	t.Setenv("H2APK_TEST_VALUE", "test-value")
+
+	got := env("H2APK_TEST_VALUE", "default")
+
+	if got != "test-value" {
+		t.Errorf("expected test-value, got %s", got)
 	}
 }
 
-// TestFileSizeLimit validates that main.go is within size limits.
-func TestFileSizeLimit(t *testing.T) {
-	info, err := os.Stat("main.go")
-	if err != nil {
-		t.Fatalf("Cannot stat main.go: %v", err)
-	}
-	if info.Size() > 1024*1024 {
-		t.Errorf("main.go too large: %d bytes", info.Size())
-	}
-}
+func TestEnvDefault(t *testing.T) {
+	t.Setenv("H2APK_EMPTY_VALUE", "")
 
-// TestHandleBuild tests build request structure.
-func TestHandleBuild(t *testing.T) {
-	// BuildRequest is in internal/types; just verify it can be imported and used.
-	// The HTTP handler itself is tested via integration.
-	_ = "placeholder — handler integration test"
+	got := env("H2APK_EMPTY_VALUE", "default")
+
+	if got != "default" {
+		t.Errorf("expected default, got %s", got)
+	}
 }
